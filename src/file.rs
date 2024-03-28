@@ -20,6 +20,7 @@ pub fn write_wallets(wallets: &Vec<String>) -> Result<(), anyhow::Error> {
 
 pub fn read_wallets() -> Result<Vec<String>, anyhow::Error> {
     let mut rdr = csv::Reader::from_path("wallets.csv")?;
+    rdr.set_headers(csv::StringRecord::from(vec!["wallet"]));
     let mut wallets = Vec::new();
     for result in rdr.deserialize() {
         let wallet: String = result?;
