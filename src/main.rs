@@ -101,6 +101,7 @@ async fn fetch_user_info(client: &Client, address: &str) -> Result<User, anyhow:
             total_points: "0".to_string(),
             total_ref_points: "0".to_string(),
             total_build_points: "0".to_string(),
+            total_extra_points: "0".to_string(),
         },
     };
 
@@ -112,6 +113,7 @@ async fn fetch_user_info(client: &Client, address: &str) -> Result<User, anyhow:
         total_points: points.total_points.parse()?,
         total_ref_points: points.total_ref_points.parse()?,
         total_build_points: points.total_build_points.parse()?,
+        total_extra_points: points.total_extra_points.parse()?,
     })
 }
 
@@ -124,6 +126,7 @@ struct User {
     total_points: f64,
     total_ref_points: f64,
     total_build_points: f64,
+    total_extra_points: f64,
 }
 
 async fn fetch_users(client: &Client) -> Result<Vec<String>, anyhow::Error> {
@@ -179,6 +182,7 @@ struct PointsResponse {
     total_points: String,
     total_ref_points: String,
     total_build_points: String,
+    total_extra_points: String,
 }
 
 #[derive(Deserialize, Serialize)]
