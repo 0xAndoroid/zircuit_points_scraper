@@ -32,7 +32,7 @@ async fn main() {
     let mut user_infos = Vec::new();
 
     // Increasing chunk size causes rate limiting error
-    let chunk_size = 3;
+    let chunk_size = env::var("ZIRCUIT_CHUNK_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
 
     for users_chunk in users.chunks(chunk_size) {
         let mut handles = Vec::new();
@@ -42,7 +42,10 @@ async fn main() {
             let handle = tokio::spawn(async move { fetch_user_info(&client, &user_cl).await });
             handles.push((user, handle));
             // For some reason smaller numbers take longer time by 2 seconds / 250 requests
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(
+                env::var("ZIRCUIT_COOLDOWN").unwrap_or("50".to_string()).parse::<u64>().unwrap(),
+            ))
+            .await;
         }
         for (user, handle) in handles {
             let user_info = handle
