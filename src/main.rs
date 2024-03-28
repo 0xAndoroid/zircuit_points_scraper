@@ -12,6 +12,9 @@ mod file;
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info");
+    }
     env_logger::init();
     info!("Starting Zircuit wallet fetcher");
     let client = Client::new();
@@ -32,7 +35,7 @@ async fn main() {
     let mut user_infos = Vec::new();
 
     // Increasing chunk size causes rate limiting error
-    let chunk_size = env::var("ZIRCUIT_CHUNK_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
+    let chunk_size = env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
 
     for users_chunk in users.chunks(chunk_size) {
         let mut handles = Vec::new();
