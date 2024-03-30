@@ -12,7 +12,7 @@ Turns out that points info is publicly available (it's not like blockchain is pr
 ## Important note
 
 Fetching 19,000 wallets takes approximately an hour. I refetch results sometimes, here they are available on [google sheets](https://docs.google.com/spreadsheets/d/1fbssrYKsxSd9mKDuwAKjMwXwGRMxdVyZiFATj6X1vT0/edit?usp=sharing)  
-Another important note: apart from points, referral codes are available, so you can find wallet address of people in discord. 
+Another important note: apart from points, referral codes are available, so you can find wallet address of people in discord.
 
 ## Executing
 
@@ -30,8 +30,8 @@ ZIRCUIT_BATCH_SIZE=25 # Defaults to 25
 ZIRCUIT_COOLDOWN=20 # Defaults to 50
 ```
 
-    - Note, last two variables control frequency of requests to Zircuit. Requests are sent in batches, then awaited all together.
-      First variable corresponds to number of requests per batch, second milliseconds between requests are sent (just sent, not received).
-      I found that setting batch size >= 50 slows down the process, sometimes it needs to be less than 10 or you'll get rate limited.
+- Note, last two variables control frequency of requests to Zircuit. Requests are sent in batches, then awaited all together.
+  First variable corresponds to number of requests per batch, second milliseconds between requests are sent (just sent, not received).
+  I found that setting batch size >= 50 slows down the process, sometimes it needs to be less than 10 or you'll get rate limited.
 
 2. Run `cargo run --release`
