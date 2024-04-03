@@ -27,6 +27,14 @@ async fn main() {
             users
         }
     };
+    let users = users
+        .into_iter()
+        .filter(|u| {
+            u != "0x7a493be5c2ce014cd049bf178a1ac0db1b434744"
+                && u != "0x34349c5569e7b846c3558961552d2202760a9789"
+                && u != "0xd7df7e085214743530aff339afc420c7c720bfa7"
+        })
+        .collect::<Vec<String>>();
     let total_users = users.len();
     let mut fetched_users = 0;
     let timer = std::time::Instant::now();
@@ -35,7 +43,8 @@ async fn main() {
     let mut user_infos = Vec::new();
 
     // Increasing chunk size causes rate limiting error
-    let chunk_size = env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
+    let chunk_size =
+        env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
 
     for users_chunk in users.chunks(chunk_size) {
         let mut handles = Vec::new();
