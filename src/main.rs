@@ -33,6 +33,7 @@ async fn main() {
             u != "0x7a493be5c2ce014cd049bf178a1ac0db1b434744"
                 && u != "0x34349c5569e7b846c3558961552d2202760a9789"
                 && u != "0xd7df7e085214743530aff339afc420c7c720bfa7"
+                && u != "0x0000000000000000000000000000000000000000"
         })
         .collect::<Vec<String>>();
     let total_users = users.len();
