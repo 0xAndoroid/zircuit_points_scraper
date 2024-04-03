@@ -102,6 +102,7 @@ async fn fetch_user_info(client: &Client, address: &str) -> Result<User, anyhow:
             total_ref_points: "0".to_string(),
             total_build_points: "0".to_string(),
             total_extra_points: "0".to_string(),
+            total_pendle_points: "0".to_string(),
         },
     };
 
@@ -114,6 +115,7 @@ async fn fetch_user_info(client: &Client, address: &str) -> Result<User, anyhow:
         total_ref_points: points.total_ref_points.parse()?,
         total_build_points: points.total_build_points.parse()?,
         total_extra_points: points.total_extra_points.parse()?,
+        total_pendle_points: points.total_pendle_points.parse()?,
     })
 }
 
@@ -127,12 +129,13 @@ struct User {
     total_ref_points: f64,
     total_build_points: f64,
     total_extra_points: f64,
+    total_pendle_points: f64,
 }
 
 async fn fetch_users(client: &Client) -> Result<Vec<String>, anyhow::Error> {
     let mut wallets: Vec<String> = Vec::new();
     let mut next_uri = format!(
-        "https://api.dune.com/api/v1/query/3459485/results?limit={}",
+        "https://api.dune.com/api/v1/query/3585761/results?limit={}",
         env::var("DUNE_LINES_PER_REQUEST")?
     );
 
@@ -183,6 +186,7 @@ struct PointsResponse {
     total_ref_points: String,
     total_build_points: String,
     total_extra_points: String,
+    total_pendle_points: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -208,15 +212,7 @@ struct DuneResult {
 
 #[derive(Deserialize, Serialize)]
 struct Rows {
-    evt_block_time: String,
-    evt_block_number: u64,
     from: Option<String>,
-    to: String,
-    evt_tx_hash: String,
-    #[serde(rename = "type")]
-    type_of_transfer: String,
-    symbol: String,
-    transfers: f64,
 }
 
 #[derive(Deserialize, Serialize)]
