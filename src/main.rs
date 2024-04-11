@@ -1,5 +1,7 @@
 use std::env;
+use std::time::Duration;
 
+use fancy_duration::AsFancyDuration;
 use file::write_csv;
 use log::{error, info, warn};
 use reqwest::Client;
@@ -72,7 +74,16 @@ async fn main() {
             fetched_users += 1;
             if fetched_users % 250 == 0 {
                 info!("Fetched {}/{}", fetched_users, total_users);
-                info!("Elapsed time: {:?}", timer.elapsed());
+                let ellapsed = Duration::from_secs(timer.elapsed().as_secs());
+                let remaining = Duration::from_secs(
+                    (ellapsed * (total_users as u32 - fetched_users as u32) / fetched_users as u32)
+                        .as_secs(),
+                );
+                info!(
+                    "Elapsed time: {} / {}",
+                    ellapsed.fancy_duration().to_string(),
+                    remaining.fancy_duration().to_string()
+                );
                 write_csv(&user_infos).unwrap();
             }
         }
