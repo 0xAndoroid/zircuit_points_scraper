@@ -45,6 +45,9 @@ async fn main() {
 
     let mut user_infos = Vec::new();
 
+    let fetch_referral_codes =
+        env::var("FETCH_REFERRAL_CODES").unwrap_or("false".to_string()).parse::<bool>().unwrap();
+
     // Increasing chunk size causes rate limiting error
     let chunk_size =
         env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
@@ -54,7 +57,9 @@ async fn main() {
         for user in users_chunk {
             let client = client.clone();
             let user_cl = user.clone();
-            let handle = tokio::spawn(async move { fetch_user_info(&client, &user_cl).await });
+            let handle = tokio::spawn(async move {
+                fetch_user_info(&client, &user_cl, fetch_referral_codes).await
+            });
             handles.push((user, handle));
             // For some reason smaller numbers take longer time by 2 seconds / 250 requests
             tokio::time::sleep(tokio::time::Duration::from_millis(
@@ -93,13 +98,21 @@ async fn main() {
     write_csv(&user_infos).unwrap();
 }
 
-async fn fetch_user_info(client: &Client, address: &str) -> Result<User, anyhow::Error> {
-    let user_response = client
-        .get(format!("https://stake.zircuit.com/api/user/{}", address))
-        .send()
-        .await?
-        .json::<UserResponse>()
-        .await;
+async fn fetch_user_info(
+    client: &Client,
+    address: &str,
+    fetch_referral_codes: bool,
+) -> Result<User, anyhow::Error> {
+    let user_response = if fetch_referral_codes {
+        client
+            .get(format!("https://stake.zircuit.com/api/user/{}", address))
+            .send()
+            .await?
+            .json::<UserResponse>()
+            .await
+    } else {
+        Ok(UserResponse::default())
+    };
     let points_response = client
         .get(format!("https://stake.zircuit.com/api/points/{}", address))
         .send()
@@ -192,7 +205,7 @@ async fn fetch_users(client: &Client) -> Result<Vec<String>, anyhow::Error> {
         .collect())
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct UserResponse {
     referral_code: String,
@@ -200,7 +213,7 @@ struct UserResponse {
     signed_build_and_earn: bool,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct PointsResponse {
     total_points: String,

@@ -28,6 +28,7 @@ DUNE_API_KEY=MyDuneApiKey # Mandatory if you delete wallets.csv
 DUNE_LINES_PER_REQUEST=1000 # Mandatory if you delete wallets.csv
 ZIRCUIT_BATCH_SIZE=25 # Defaults to 25
 ZIRCUIT_COOLDOWN=20 # Defaults to 50
+FETCH_REFERRAL_CODES=false # Defaults to false; speeds up the process
 ```
 
 - Note, last two variables control frequency of requests to Zircuit. Requests are sent in batches, then awaited all together.
