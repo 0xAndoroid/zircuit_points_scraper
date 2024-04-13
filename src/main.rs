@@ -2,12 +2,12 @@ use std::env;
 use std::time::Duration;
 
 use fancy_duration::AsFancyDuration;
-use file::write_csv;
+use file::write_points;
 use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::file::{read_wallets, write_wallets};
+use crate::file::{read_wallets, write_wallets, read_points};
 
 mod file;
 
@@ -43,7 +43,10 @@ async fn main() {
     let timer = std::time::Instant::now();
     info!("Total users: {}", total_users);
 
-    let mut user_infos = Vec::new();
+    let mut user_infos = match read_points() {
+        Ok(users) => users,
+        Err(_) => Vec::new(),
+    };
 
     let fetch_referral_codes =
         env::var("FETCH_REFERRAL_CODES").unwrap_or("false".to_string()).parse::<bool>().unwrap();
@@ -51,8 +54,15 @@ async fn main() {
     // Increasing chunk size causes rate limiting error
     let chunk_size =
         env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
+    
+    let mut skip_chunks = user_infos.len() / chunk_size;
 
     for users_chunk in users.chunks(chunk_size) {
+        if skip_chunks > 0 {
+            skip_chunks -= 1;
+            fetched_users += users_chunk.len();
+            continue;
+        }
         let mut handles = Vec::new();
         for user in users_chunk {
             let client = client.clone();
@@ -89,13 +99,13 @@ async fn main() {
                     ellapsed.fancy_duration().to_string(),
                     remaining.fancy_duration().to_string()
                 );
-                write_csv(&user_infos).unwrap();
+                write_points(&user_infos).unwrap();
             }
         }
     }
     info!("Finished fetching all users!");
     info!("Elapsed time: {:?}", timer.elapsed());
-    write_csv(&user_infos).unwrap();
+    write_points(&user_infos).unwrap();
 }
 
 async fn fetch_user_info(

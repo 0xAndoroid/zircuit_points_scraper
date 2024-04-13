@@ -1,6 +1,6 @@
 use crate::User;
 
-pub fn write_csv(users: &Vec<User>) -> Result<(), anyhow::Error> {
+pub fn write_points(users: &Vec<User>) -> Result<(), anyhow::Error> {
     let mut wtr = csv::Writer::from_path("users.csv")?;
     for user in users {
         wtr.serialize(user)?;
@@ -16,6 +16,16 @@ pub fn write_wallets(wallets: &Vec<String>) -> Result<(), anyhow::Error> {
     }
     wtr.flush()?;
     Ok(())
+}
+
+pub fn read_points() -> Result<Vec<User>, anyhow::Error> {
+    let mut rdr = csv::Reader::from_path("users.csv")?;
+    let mut users = Vec::new();
+    for result in rdr.deserialize() {
+        let user: User = result?;
+        users.push(user);
+    }
+    Ok(users)
 }
 
 pub fn read_wallets() -> Result<Vec<String>, anyhow::Error> {
