@@ -7,7 +7,7 @@ use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::file::{read_wallets, write_wallets, read_points};
+use crate::file::{read_points, read_wallets, write_wallets};
 
 mod file;
 
@@ -24,7 +24,13 @@ async fn main() {
         Ok(users) => users,
         Err(_) => {
             warn!("No wallets found, fetching from Dune API");
-            let users = fetch_users(&client).await.unwrap();
+            let users = match fetch_users(&client).await {
+                Ok(users) => users,
+                Err(e) => {
+                    error!("Error fetching users: {:?}", e);
+                    return;
+                }
+            };
             write_wallets(&users).unwrap();
             users
         }
@@ -38,15 +44,25 @@ async fn main() {
                 && u != "0x0000000000000000000000000000000000000000"
         })
         .collect::<Vec<String>>();
-    let total_users = users.len();
     let mut fetched_users = 0;
     let timer = std::time::Instant::now();
-    info!("Total users: {}", total_users);
+    info!("Total users: {}", users.len());
 
     let mut user_infos = match read_points() {
         Ok(users) => users,
         Err(_) => Vec::new(),
     };
+    if users.len() == user_infos.len() {
+        info!("All users have been prefetched!");
+        return;
+    }
+    if user_infos.len() % 250 != 0 {
+        let last_chunk = user_infos.len() % 250;
+        user_infos.truncate(user_infos.len() - last_chunk);
+    }
+    info!("Prefetched users: {}", user_infos.len());
+    let total_users = users.len() - user_infos.len();
+    info!("To be fetched users: {}", total_users);
 
     let fetch_referral_codes =
         env::var("FETCH_REFERRAL_CODES").unwrap_or("false".to_string()).parse::<bool>().unwrap();
@@ -54,13 +70,12 @@ async fn main() {
     // Increasing chunk size causes rate limiting error
     let chunk_size =
         env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
-    
+
     let mut skip_chunks = user_infos.len() / chunk_size;
 
     for users_chunk in users.chunks(chunk_size) {
         if skip_chunks > 0 {
             skip_chunks -= 1;
-            fetched_users += users_chunk.len();
             continue;
         }
         let mut handles = Vec::new();
@@ -80,12 +95,12 @@ async fn main() {
         for (user, handle) in handles {
             let user_info = handle
                 .await
-                .unwrap()
-                .map_err(|e| {
-                    error!("Error fetching user info for {}: {:?}", user, e);
-                })
-                .unwrap();
-            user_infos.push(user_info);
+                .unwrap() ;
+            if user_info.is_err() {
+                error!("Error fetching user info {}: {:?}", user, user_info.err().unwrap());
+                continue;
+            }
+            user_infos.push(user_info.unwrap());
             fetched_users += 1;
             if fetched_users % 250 == 0 {
                 info!("Fetched {}/{}", fetched_users, total_users);
@@ -127,27 +142,24 @@ async fn fetch_user_info(
         .get(format!("https://stake.zircuit.com/api/points/{}", address))
         .send()
         .await?
-        .json::<PointsResponse>()
+        .text()
         .await;
 
     let user: UserResponse = match user_response {
         Ok(user) => user,
-        _ => UserResponse {
-            referral_code: "".to_string(),
-            signed: false,
-            signed_build_and_earn: false,
-        },
+        _ => UserResponse::default(),
     };
 
     let points: PointsResponse = match points_response {
-        Ok(points) => points,
-        _ => PointsResponse {
-            total_points: "0".to_string(),
-            total_ref_points: "0".to_string(),
-            total_build_points: "0".to_string(),
-            total_extra_points: "0".to_string(),
-            total_pendle_points: "0".to_string(),
-        },
+        Ok(points) => match serde_json::from_str(&points) {
+            Ok(points) => points,
+            Err(e) => {
+                error!("Error parsing points response: {:?}", e);
+                error!("Response: {:?}", points);
+                PointsResponse::default()
+            }
+        }
+        _ => PointsResponse::default(),
     };
 
     Ok(User {
@@ -223,7 +235,7 @@ struct UserResponse {
     signed_build_and_earn: bool,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PointsResponse {
     total_points: String,
@@ -231,6 +243,18 @@ struct PointsResponse {
     total_build_points: String,
     total_extra_points: String,
     total_pendle_points: String,
+}
+
+impl Default for PointsResponse {
+    fn default() -> Self {
+        PointsResponse {
+            total_points: "0".to_string(),
+            total_ref_points: "0".to_string(),
+            total_build_points: "0".to_string(),
+            total_extra_points: "0".to_string(),
+            total_pendle_points: "0".to_string(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
