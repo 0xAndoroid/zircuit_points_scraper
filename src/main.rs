@@ -202,8 +202,9 @@ async fn fetch_users(client: &Client) -> Result<Vec<String>, anyhow::Error> {
             .header("X-Dune-API-Key", env::var("DUNE_API_KEY")?)
             .send()
             .await?
-            .json::<DuneResponse>()
+            .text()
             .await?;
+        let result: DuneResponse = serde_json::from_str(&result).map_err(|_| anyhow::Error::msg(result))?;
         let mut batch: Vec<String> = result
             .result
             .rows
