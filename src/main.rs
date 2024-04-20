@@ -191,7 +191,8 @@ struct User {
 async fn fetch_users(client: &Client) -> Result<Vec<String>, anyhow::Error> {
     let mut wallets: Vec<String> = Vec::new();
     let mut next_uri = format!(
-        "https://api.dune.com/api/v1/query/3585761/results?limit={}",
+        "https://api.dune.com/api/v1/query/{}/results?limit={}",
+        env::var("DUNE_QUERY_ID")?,
         env::var("DUNE_LINES_PER_REQUEST")?
     );
 
