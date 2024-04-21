@@ -26,7 +26,7 @@ Another important note: apart from points, referral codes are available, so you 
 RUST_LOG=info # Optional, defaults to info
 DUNE_API_KEY=MyDuneApiKey # Mandatory if you delete wallets.csv
 DUNE_LINES_PER_REQUEST=1000 # Mandatory if you delete wallets.csv
-DUNE_QUERY_ID=3653072 # Dune query ID (sometimes Dune bans me, so it needs to be changed)
+DUNE_QUERY_ID=3653109 # Dune query ID (sometimes Dune bans me, so it needs to be changed)
 ZIRCUIT_BATCH_SIZE=25 # Defaults to 25
 ZIRCUIT_COOLDOWN=20 # Defaults to 50
 FETCH_REFERRAL_CODES=false # Defaults to false; speeds up the process
