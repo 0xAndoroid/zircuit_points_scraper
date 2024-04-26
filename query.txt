@@ -8,6 +8,7 @@ FROM
       erc20_ethereum.evt_transfer
     WHERE
       to = 0xf047ab4c75cebf0eb9ed34ae2c186f3611aeafa6
+      OR to = 0x324c5Dc1fC42c7a4D43d92df1eBA58a54d13Bf2d
     UNION
     SELECT
       to as "from"
