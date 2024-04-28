@@ -1,3 +1,5 @@
 /target
 .env
 run.sh
+users.csv
+wallets.csv

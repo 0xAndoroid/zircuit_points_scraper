@@ -43,6 +43,7 @@ async fn main() {
             u != "0x7a493be5c2ce014cd049bf178a1ac0db1b434744" // SY Pendle
                 && u != "0x34349c5569e7b846c3558961552d2202760a9789" // SY Pendle
                 && u != "0xd7df7e085214743530aff339afc420c7c720bfa7" // SY Pendle
+                && u != "0x293C6937D8D82e05B01335F7B33FBA0c8e256E30" // SY Pendle
                 && u != "0x0000000000000000000000000000000000000000" // Zero address
                 && u != "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497" // Fluid
         })
