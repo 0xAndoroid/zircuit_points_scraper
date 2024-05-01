@@ -1,8 +1,7 @@
 use std::env;
-use std::time::Duration;
 
-use fancy_duration::AsFancyDuration;
 use file::write_points;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -10,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::dune::fetch_users;
 use crate::file::{read_points, read_wallets, write_wallets};
 
-mod file;
 mod dune;
+mod file;
 
 #[tokio::main]
 async fn main() {
@@ -49,7 +48,6 @@ async fn main() {
         })
         .collect::<Vec<String>>();
     let mut fetched_users = 0;
-    let timer = std::time::Instant::now();
     info!("Total users: {}", users.len());
 
     let mut user_infos = match read_points() {
@@ -75,6 +73,15 @@ async fn main() {
     let chunk_size =
         env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
 
+    let progress_bar = ProgressBar::new(total_users as u64);
+    progress_bar.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos:>7}/{len:7} ({eta})",
+        )
+        .unwrap()
+        .progress_chars("#>-"),
+    );
+
     let mut skip_chunks = user_infos.len() / chunk_size;
 
     for users_chunk in users.chunks(chunk_size) {
@@ -97,34 +104,21 @@ async fn main() {
             .await;
         }
         for (user, handle) in handles {
-            let user_info = handle
-                .await
-                .unwrap() ;
+            let user_info = handle.await.unwrap();
             if user_info.is_err() {
                 error!("Error fetching user info {}: {:?}", user, user_info.err().unwrap());
                 continue;
             }
             user_infos.push(user_info.unwrap());
             fetched_users += 1;
+            progress_bar.set_position(fetched_users as u64);
             if fetched_users % 250 == 0 {
-                info!("Fetched {}/{}", fetched_users, total_users);
-                let ellapsed = Duration::from_secs(timer.elapsed().as_secs());
-                let remaining = Duration::from_secs(
-                    (ellapsed * (total_users as u32 - fetched_users as u32) / fetched_users as u32)
-                        .as_secs(),
-                );
-                info!(
-                    "Elapsed time: {} / {}",
-                    ellapsed.fancy_duration().to_string(),
-                    remaining.fancy_duration().to_string()
-                );
                 write_points(&user_infos).unwrap();
             }
         }
     }
-    info!("Finished fetching all users!");
-    info!("Elapsed time: {:?}", timer.elapsed());
     write_points(&user_infos).unwrap();
+    progress_bar.finish_with_message("Finished fetching users");
 }
 
 async fn fetch_user_info(
@@ -162,7 +156,7 @@ async fn fetch_user_info(
                 error!("{}", points);
                 PointsResponse::default()
             }
-        }
+        },
         _ => PointsResponse::default(),
     };
 
@@ -221,4 +215,3 @@ impl Default for PointsResponse {
         }
     }
 }
-
