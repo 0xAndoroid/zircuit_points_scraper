@@ -95,7 +95,13 @@ async fn main() {
             let client = client.clone();
             let user_cl = user.clone();
             let handle = tokio::spawn(async move {
-                fetch_user_info(&client, &user_cl, fetch_referral_codes).await
+                tryhard::retry_fn(|| async {
+                    fetch_user_info(&client, &user_cl, fetch_referral_codes).await
+                })
+                    .retries(5)
+                    .exponential_backoff(std::time::Duration::from_secs(1))
+                    .max_delay(std::time::Duration::from_secs(5))
+                    .await
             });
             handles.push((user, handle));
             // For some reason smaller numbers take longer time by 2 seconds / 250 requests
