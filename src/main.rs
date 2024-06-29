@@ -1,16 +1,21 @@
 use std::env;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 use file::write_points;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 use crate::dune::fetch_users;
 use crate::file::{read_points, read_wallets, write_wallets};
 
 mod dune;
 mod file;
+
+const PROXY: &str = include_str!("../proxies.json");
 
 #[tokio::main]
 async fn main() {
@@ -20,12 +25,13 @@ async fn main() {
     }
     env_logger::init();
     info!("Starting Zircuit wallet fetcher");
-    let client = Client::new();
+    let clients = init_clients().await;
+    info!("Clients initialized: {}", clients.len());
     let users = match read_wallets() {
         Ok(users) => users,
         Err(_) => {
             warn!("No wallets found, fetching from Dune API");
-            let users = match fetch_users(&client).await {
+            let users = match fetch_users().await {
                 Ok(users) => users,
                 Err(e) => {
                     error!("Error fetching users: {:?}", e);
@@ -36,7 +42,7 @@ async fn main() {
             users
         }
     };
-    let users = users
+    let mut users = users
         .into_iter()
         .filter(|u| {
             let u = u.to_lowercase();
@@ -45,35 +51,59 @@ async fn main() {
                 && u != "0xd7df7e085214743530aff339afc420c7c720bfa7".to_lowercase() // SY Pendle
                 && u != "0x293C6937D8D82e05B01335F7B33FBA0c8e256E30".to_lowercase() // SY Pendle
                 && u != "0x0000000000000000000000000000000000000000".to_lowercase() // Zero address
-                && u != "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497".to_lowercase() // Fluid
+                && u != "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497".to_lowercase()
+            // Fluid
         })
         .collect::<Vec<String>>();
-    let mut fetched_users = 0;
     info!("Total users: {}", users.len());
 
     let mut user_infos = match read_points() {
         Ok(users) => users,
         Err(_) => Vec::new(),
     };
+
     if users.len() == user_infos.len() {
         info!("All users have been prefetched!");
         return;
     }
-    if user_infos.len() % 250 != 0 {
-        let last_chunk = user_infos.len() % 250;
-        user_infos.truncate(user_infos.len() - last_chunk);
-    }
+    
     info!("Prefetched users: {}", user_infos.len());
-    let total_users = users.len() - user_infos.len();
+
+    users.retain(|u| !user_infos.iter().any(|ui| ui.address == *u));
+    let fetched_users: Arc<AtomicUsize> = Arc::new(0.into());
+    let total_users = users.len();
     info!("To be fetched users: {}", total_users);
+    let users = Arc::new(users);
 
-    let fetch_referral_codes =
-        env::var("FETCH_REFERRAL_CODES").unwrap_or("false".to_string()).parse::<bool>().unwrap();
+    #[allow(clippy::let_underscore_future)]
+    let _ = tokio::spawn(progress_bar(fetched_users.clone(), total_users));
 
-    // Increasing chunk size causes rate limiting error
-    let chunk_size =
-        env::var("ZIRCUIT_BATCH_SIZE").unwrap_or("25".to_string()).parse::<usize>().unwrap();
+    let (tx, mut rx) = mpsc::channel::<User>(250);
 
+    let mut handles = Vec::new();
+    for client in clients {
+        let users = users.clone();
+        let fetched_users = fetched_users.clone();
+        let tx = tx.clone();
+        let handle = tokio::spawn(async move {
+            run_one_client(client, users, fetched_users, tx).await;
+        });
+        handles.push(handle);
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    while let Some(user) = rx.recv().await {
+        user_infos.push(user);
+        let f = fetched_users.load(std::sync::atomic::Ordering::SeqCst);
+        if f % 250 == 0 {
+            write_points(&user_infos).unwrap();
+        }
+    }
+
+    write_points(&user_infos).unwrap();
+}
+
+async fn progress_bar(fetched_users: Arc<AtomicUsize>, total_users: usize) {
     let progress_bar = ProgressBar::new(total_users as u64);
     progress_bar.set_style(
         ProgressStyle::with_template(
@@ -82,50 +112,93 @@ async fn main() {
         .unwrap()
         .progress_chars("#>-"),
     );
+    progress_bar.set_position(0);
 
-    let mut skip_chunks = user_infos.len() / chunk_size;
+    loop {
+        let f = fetched_users.load(std::sync::atomic::Ordering::SeqCst);
+        progress_bar.set_position(f as u64);
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+}
 
-    for users_chunk in users.chunks(chunk_size) {
-        if skip_chunks > 0 {
-            skip_chunks -= 1;
+async fn run_one_client(
+    client: Client,
+    users: Arc<Vec<String>>,
+    fetched_users: Arc<AtomicUsize>,
+    mpsc: mpsc::Sender<User>,
+) {
+    let fetch_referral_codes =
+        env::var("FETCH_REFERRAL_CODES").unwrap_or("false".to_string()).parse::<bool>().unwrap();
+
+    loop {
+        let user_to_fetch = fetched_users.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if user_to_fetch >= users.len() {
+            break;
+        }
+        let sleep_task = tokio::time::sleep(tokio::time::Duration::from_millis(
+            std::env::var("ZIRCUIT_COOLDOWN").unwrap_or("1100".to_string()).parse::<u64>().unwrap(),
+        ));
+        let user_addr = users[user_to_fetch].clone();
+        let user = tryhard::retry_fn(|| async {
+            fetch_user_info(&client, &user_addr, fetch_referral_codes).await
+        })
+        .retries(10)
+        .exponential_backoff(std::time::Duration::from_secs(5))
+        .max_delay(std::time::Duration::from_secs(300))
+        .await;
+
+        if user.is_err() {
+            error!("Error fetching user info {}: {:?}", user_addr, user.err().unwrap());
             continue;
         }
-        let mut handles = Vec::new();
-        for user in users_chunk {
-            let client = client.clone();
-            let user_cl = user.clone();
-            let handle = tokio::spawn(async move {
-                tryhard::retry_fn(|| async {
-                    fetch_user_info(&client, &user_cl, fetch_referral_codes).await
-                })
-                    .retries(5)
-                    .exponential_backoff(std::time::Duration::from_secs(1))
-                    .max_delay(std::time::Duration::from_secs(5))
-                    .await
-            });
-            handles.push((user, handle));
-            // For some reason smaller numbers take longer time by 2 seconds / 250 requests
-            tokio::time::sleep(tokio::time::Duration::from_millis(
-                env::var("ZIRCUIT_COOLDOWN").unwrap_or("50".to_string()).parse::<u64>().unwrap(),
-            ))
-            .await;
-        }
-        for (user, handle) in handles {
-            let user_info = handle.await.unwrap();
-            if user_info.is_err() {
-                error!("Error fetching user info {}: {:?}", user, user_info.err().unwrap());
-                continue;
-            }
-            user_infos.push(user_info.unwrap());
-            fetched_users += 1;
-            progress_bar.set_position(fetched_users as u64);
-            if fetched_users % 250 == 0 {
-                write_points(&user_infos).unwrap();
-            }
-        }
+
+        mpsc.send(user.unwrap()).await.unwrap();
+
+        sleep_task.await;
     }
-    write_points(&user_infos).unwrap();
-    progress_bar.finish_with_message("Finished fetching users");
+}
+
+// async fn verify_ips_are_different(clients: &Vec<Client>) {
+//     let mut hashset = std::collections::HashSet::new();
+//     let mut handles = Vec::new();
+//     for client in clients {
+//         let client = client.clone();
+//         let ip_h = tokio::spawn(async move {
+//             client.get("https://api.ipify.org").send().await.unwrap().text().await.unwrap()
+//         });
+//         handles.push(ip_h);
+//     }
+//
+//     for handle in handles {
+//         let ip = handle.await.unwrap();
+//         hashset.insert(ip.clone());
+//     }
+//
+//     if hashset.len() != clients.len() {
+//         error!("IPs are not different!");
+//         std::process::exit(1);
+//     }
+// }
+
+async fn init_clients() -> Vec<Client> {
+    let proxies: Vec<String> = match serde_json::from_str(PROXY) {
+        Ok(proxies) => proxies,
+        Err(_) => {
+            warn!("No proxies found, will use direct connection");
+            Vec::new()
+        }
+    };
+    
+    let mut clients = Vec::new();
+
+    clients.push(Client::new());
+
+    for proxy in proxies {
+        let proxy = reqwest::Proxy::all(proxy).unwrap();
+        let client = Client::builder().proxy(proxy).build().unwrap();
+        clients.push(client);
+    }
+    clients
 }
 
 async fn fetch_user_info(
@@ -159,12 +232,10 @@ async fn fetch_user_info(
         Ok(points) => match serde_json::from_str(&points) {
             Ok(points) => points,
             Err(_) => {
-                error!("Failed fetching points of user {}", address);
-                error!("{}", points);
-                PointsResponse::default()
+                anyhow::bail!("{}", points);
             }
         },
-        _ => PointsResponse::default(),
+        _ => anyhow::bail!("Unknown error"),
     };
 
     Ok(User {

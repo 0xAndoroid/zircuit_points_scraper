@@ -27,8 +27,7 @@ RUST_LOG=info # Optional, defaults to info
 DUNE_API_KEY=MyDuneApiKey # Mandatory if you delete wallets.csv
 DUNE_LINES_PER_REQUEST=1000 # Mandatory if you delete wallets.csv
 DUNE_QUERY_ID=3653109 # Dune query ID (sometimes Dune bans me, so it needs to be changed)
-ZIRCUIT_BATCH_SIZE=25 # Defaults to 25
-ZIRCUIT_COOLDOWN=20 # Defaults to 50
+ZIRCUIT_COOLDOWN=1100 # Defaults to 1100
 FETCH_REFERRAL_CODES=false # Defaults to false; speeds up the process
 ```
 
@@ -36,4 +35,6 @@ FETCH_REFERRAL_CODES=false # Defaults to false; speeds up the process
   First variable corresponds to number of requests per batch, second milliseconds between requests are sent (just sent, not received).
   I found that setting batch size >= 50 slows down the process, sometimes it needs to be less than 10 or you'll get rate limited.
 
-2. Run `cargo run --release`
+2. Create a file called proxies.json in which put HTTP proxies in a JSON array of strings, where each string has a format user:pass@host:port.
+
+3. Run `cargo run --release`

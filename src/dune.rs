@@ -4,13 +4,14 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 
-pub async fn fetch_users(client: &Client) -> Result<Vec<String>, anyhow::Error> {
+pub async fn fetch_users() -> Result<Vec<String>, anyhow::Error> {
     let mut wallets: Vec<String> = Vec::new();
     let mut next_uri = format!(
         "https://api.dune.com/api/v1/query/{}/results?limit={}",
         env::var("DUNE_QUERY_ID")?,
         env::var("DUNE_LINES_PER_REQUEST")?
     );
+    let client = Client::new();
 
     loop {
         let result = client
