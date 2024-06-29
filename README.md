@@ -11,7 +11,7 @@ Turns out that points info is publicly available (it's not like blockchain is pr
 
 ## Important note
 
-Fetching 19,000 wallets takes approximately an hour. I refetch results sometimes, here they are available on [google sheets](https://docs.google.com/spreadsheets/d/1fbssrYKsxSd9mKDuwAKjMwXwGRMxdVyZiFATj6X1vT0/edit?usp=sharing)  
+Fetching 100,000 wallets takes approximately 10 hours. I refetch results sometimes, here they are available on [google sheets](https://docs.google.com/spreadsheets/d/1fbssrYKsxSd9mKDuwAKjMwXwGRMxdVyZiFATj6X1vT0/edit?usp=sharing)  
 Another important note: apart from points, referral codes are available, so you can find wallet address of people in discord.
 
 ## Executing
@@ -28,12 +28,7 @@ DUNE_API_KEY=MyDuneApiKey # Mandatory if you delete wallets.csv
 DUNE_LINES_PER_REQUEST=1000 # Mandatory if you delete wallets.csv
 DUNE_QUERY_ID=3653109 # Dune query ID (sometimes Dune bans me, so it needs to be changed)
 ZIRCUIT_COOLDOWN=1100 # Defaults to 1100
-FETCH_REFERRAL_CODES=false # Defaults to false; speeds up the process
 ```
-
-- Note, last two variables control frequency of requests to Zircuit. Requests are sent in batches, then awaited all together.
-  First variable corresponds to number of requests per batch, second milliseconds between requests are sent (just sent, not received).
-  I found that setting batch size >= 50 slows down the process, sometimes it needs to be less than 10 or you'll get rate limited.
 
 2. Create a file called proxies.json in which put HTTP proxies in a JSON array of strings, where each string has a format user:pass@host:port.
 

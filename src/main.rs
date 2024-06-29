@@ -127,9 +127,6 @@ async fn run_one_client(
     fetched_users: Arc<AtomicUsize>,
     mpsc: mpsc::Sender<User>,
 ) {
-    let fetch_referral_codes =
-        env::var("FETCH_REFERRAL_CODES").unwrap_or("false".to_string()).parse::<bool>().unwrap();
-
     loop {
         let user_to_fetch = fetched_users.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if user_to_fetch >= users.len() {
@@ -140,7 +137,7 @@ async fn run_one_client(
         ));
         let user_addr = users[user_to_fetch].clone();
         let user = tryhard::retry_fn(|| async {
-            fetch_user_info(&client, &user_addr, fetch_referral_codes).await
+            fetch_user_info(&client, &user_addr).await
         })
         .retries(10)
         .exponential_backoff(std::time::Duration::from_secs(5))
@@ -204,29 +201,13 @@ async fn init_clients() -> Vec<Client> {
 async fn fetch_user_info(
     client: &Client,
     address: &str,
-    fetch_referral_codes: bool,
 ) -> Result<User, anyhow::Error> {
-    let user_response = if fetch_referral_codes {
-        client
-            .get(format!("https://stake.zircuit.com/api/user/{}", address))
-            .send()
-            .await?
-            .json::<UserResponse>()
-            .await
-    } else {
-        Ok(UserResponse::default())
-    };
     let points_response = client
         .get(format!("https://stake.zircuit.com/api/points/{}", address))
         .send()
         .await?
         .text()
         .await;
-
-    let user: UserResponse = match user_response {
-        Ok(user) => user,
-        _ => UserResponse::default(),
-    };
 
     let points: PointsResponse = match points_response {
         Ok(points) => match serde_json::from_str(&points) {
@@ -240,9 +221,9 @@ async fn fetch_user_info(
 
     Ok(User {
         address: address.to_string(),
-        referral_code: user.referral_code,
-        signed: user.signed,
-        signed_build_and_earn: user.signed_build_and_earn,
+        referral_code: "".to_string(),
+        signed: false,
+        signed_build_and_earn: false,
         total_points: points.total_points.parse()?,
         total_ref_points: points.total_ref_points.parse()?,
         total_build_points: points.total_build_points.parse()?,
