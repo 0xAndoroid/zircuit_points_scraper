@@ -74,6 +74,7 @@ async fn main() {
     let total_users = users.len();
     info!("To be fetched users: {}", total_users);
     let users = Arc::new(users);
+    let clients_len = clients.len();
 
     #[allow(clippy::let_underscore_future)]
     let _ = tokio::spawn(progress_bar(fetched_users.clone(), total_users));
@@ -92,9 +93,11 @@ async fn main() {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    while let Some(user) = rx.recv().await {
+    while let (Some(user), f) = (rx.recv().await, fetched_users.load(std::sync::atomic::Ordering::SeqCst)) {
+        if f == users.len() + clients_len {
+            break;
+        }
         user_infos.push(user);
-        let f = fetched_users.load(std::sync::atomic::Ordering::SeqCst);
         if f % 250 == 0 {
             write_points(&user_infos).unwrap();
         }
@@ -139,7 +142,7 @@ async fn run_one_client(
         let user = tryhard::retry_fn(|| async {
             fetch_user_info(&client, &user_addr).await
         })
-        .retries(10)
+        .retries(5)
         .exponential_backoff(std::time::Duration::from_secs(5))
         .max_delay(std::time::Duration::from_secs(300))
         .await;
