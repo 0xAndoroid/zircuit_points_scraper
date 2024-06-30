@@ -23,7 +23,6 @@ Another important note: apart from points, referral codes are available, so you 
 1. Set environment variables, you can do this in `.env` file
 
 ```bash
-RUST_LOG=info # Optional, defaults to info
 DUNE_API_KEY=MyDuneApiKey # Mandatory if you delete wallets.csv
 DUNE_LINES_PER_REQUEST=1000 # Mandatory if you delete wallets.csv
 DUNE_QUERY_ID=3653109 # Dune query ID (sometimes Dune bans me, so it needs to be changed)

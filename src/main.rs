@@ -1,4 +1,3 @@
-use std::env;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -20,10 +19,7 @@ const PROXY: &str = include_str!("../proxies.json");
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
-    if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", "info");
-    }
-    env_logger::init();
+    env_logger::builder().filter_level(log::LevelFilter::Info).init();
     info!("Starting Zircuit wallet fetcher");
     let clients = init_clients().await;
     info!("Clients initialized: {}", clients.len());
