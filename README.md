@@ -14,6 +14,9 @@ Turns out that points info is publicly available (it's not like blockchain is pr
 Fetching 100,000 wallets takes approximately 10 hours with 20 proxies. I refetch results sometimes, here they are available on [google sheets](https://docs.google.com/spreadsheets/d/1fbssrYKsxSd9mKDuwAKjMwXwGRMxdVyZiFATj6X1vT0/edit?usp=sharing)  
 Another important note: apart from points, referral codes are available, so you can find wallet address of people in discord.
 
+## Preview of the [dashboard](https://docs.google.com/spreadsheets/d/1fbssrYKsxSd9mKDuwAKjMwXwGRMxdVyZiFATj6X1vT0/edit?usp=sharing)
+<img width="990" alt="Screenshot 2024-07-27 at 20 26 03" src="https://github.com/user-attachments/assets/61353051-1708-4014-ad72-f75a83a66be3">
+
 ## Executing
 
 0. If you want to update list of wallets that have interacted with Zircuit, delete wallets.csv file.
