@@ -5,13 +5,16 @@ use file::write_points;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use crate::dune::fetch_users;
+use crate::fetch::User;
 use crate::file::{read_points, read_wallets, write_wallets};
 
+use self::fetch::fetch_user_info;
+
 mod dune;
+mod fetch;
 mod file;
 
 const PROXY: &str = include_str!("../proxies.json");
@@ -62,7 +65,7 @@ async fn main() {
         info!("All users have been prefetched!");
         return;
     }
-    
+
     info!("Prefetched users: {}", user_infos.len());
 
     users.retain(|u| !user_infos.iter().any(|ui| ui.address == *u));
@@ -89,7 +92,9 @@ async fn main() {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    while let (Some(user), f) = (rx.recv().await, fetched_users.load(std::sync::atomic::Ordering::SeqCst)) {
+    while let (Some(user), f) =
+        (rx.recv().await, fetched_users.load(std::sync::atomic::Ordering::SeqCst))
+    {
         if f == users.len() + clients_len {
             break;
         }
@@ -135,13 +140,11 @@ async fn run_one_client(
             std::env::var("ZIRCUIT_COOLDOWN").unwrap_or("1100".to_string()).parse::<u64>().unwrap(),
         ));
         let user_addr = users[user_to_fetch].clone();
-        let user = tryhard::retry_fn(|| async {
-            fetch_user_info(&client, &user_addr).await
-        })
-        .retries(5)
-        .exponential_backoff(std::time::Duration::from_secs(5))
-        .max_delay(std::time::Duration::from_secs(300))
-        .await;
+        let user = tryhard::retry_fn(|| async { fetch_user_info(&client, &user_addr).await })
+            .retries(5)
+            .exponential_backoff(std::time::Duration::from_secs(5))
+            .max_delay(std::time::Duration::from_secs(300))
+            .await;
 
         if user.is_err() {
             error!("Error fetching user info {}: {:?}", user_addr, user.err().unwrap());
@@ -179,97 +182,23 @@ async fn run_one_client(
 async fn init_clients() -> Vec<Client> {
     let proxies: Vec<String> = match serde_json::from_str(PROXY) {
         Ok(proxies) => proxies,
-        Err(_) => {
-            warn!("No proxies found, will use direct connection");
-            Vec::new()
-        }
+        Err(_) => Vec::new(),
     };
-    
+
+    if proxies.is_empty() {
+        warn!("No proxies found, will use direct connection");
+    }
+
     let mut clients = Vec::new();
 
+    // Use direct connection
     clients.push(Client::new());
 
+    // Proxies
     for proxy in proxies {
         let proxy = reqwest::Proxy::all(proxy).unwrap();
         let client = Client::builder().proxy(proxy).build().unwrap();
         clients.push(client);
     }
     clients
-}
-
-async fn fetch_user_info(
-    client: &Client,
-    address: &str,
-) -> Result<User, anyhow::Error> {
-    let points_response = client
-        .get(format!("https://stake.zircuit.com/api/points/{}", address))
-        .send()
-        .await?
-        .text()
-        .await;
-
-    let points: PointsResponse = match points_response {
-        Ok(points) => match serde_json::from_str(&points) {
-            Ok(points) => points,
-            Err(_) => {
-                anyhow::bail!("{}", points);
-            }
-        },
-        _ => anyhow::bail!("Unknown error"),
-    };
-
-    Ok(User {
-        address: address.to_string(),
-        referral_code: "".to_string(),
-        signed: false,
-        signed_build_and_earn: false,
-        total_points: points.total_points.parse()?,
-        total_ref_points: points.total_ref_points.parse()?,
-        total_build_points: points.total_build_points.parse()?,
-        total_extra_points: points.total_extra_points.parse()?,
-        total_pendle_points: points.total_pendle_points.parse()?,
-    })
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-struct User {
-    address: String,
-    referral_code: String,
-    signed_build_and_earn: bool,
-    signed: bool,
-    total_points: f64,
-    total_ref_points: f64,
-    total_build_points: f64,
-    total_extra_points: f64,
-    total_pendle_points: f64,
-}
-
-#[derive(Deserialize, Serialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct UserResponse {
-    referral_code: String,
-    signed: bool,
-    signed_build_and_earn: bool,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PointsResponse {
-    total_points: String,
-    total_ref_points: String,
-    total_build_points: String,
-    total_extra_points: String,
-    total_pendle_points: String,
-}
-
-impl Default for PointsResponse {
-    fn default() -> Self {
-        PointsResponse {
-            total_points: "0".to_string(),
-            total_ref_points: "0".to_string(),
-            total_build_points: "0".to_string(),
-            total_extra_points: "0".to_string(),
-            total_pendle_points: "0".to_string(),
-        }
-    }
 }

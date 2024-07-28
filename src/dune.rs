@@ -3,7 +3,6 @@ use std::env;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-
 pub async fn fetch_users() -> Result<Vec<String>, anyhow::Error> {
     let mut wallets: Vec<String> = Vec::new();
     let mut next_uri = format!(
@@ -21,7 +20,8 @@ pub async fn fetch_users() -> Result<Vec<String>, anyhow::Error> {
             .await?
             .text()
             .await?;
-        let result: DuneResponse = serde_json::from_str(&result).map_err(|_| anyhow::Error::msg(result))?;
+        let result: DuneResponse =
+            serde_json::from_str(&result).map_err(|_| anyhow::Error::msg(result))?;
         let mut batch: Vec<String> = result
             .result
             .rows

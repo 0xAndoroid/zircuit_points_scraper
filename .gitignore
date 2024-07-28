@@ -1,6 +1,6 @@
 /target
 .env
 run.sh
-users.csv
+users*.csv
 wallets.csv
 proxies.json
