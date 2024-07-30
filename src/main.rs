@@ -1,11 +1,10 @@
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
 use file::write_points;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use reqwest::Client;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 use crate::dune::fetch_users;
 use crate::fetch::User;
@@ -69,11 +68,11 @@ async fn main() {
     info!("Prefetched users: {}", user_infos.len());
 
     users.retain(|u| !user_infos.iter().any(|ui| ui.address == *u));
-    let fetched_users: Arc<AtomicUsize> = Arc::new(0.into());
+    let fetched_users: Arc<Mutex<usize>> = Arc::new(0.into());
     let total_users = users.len();
     info!("To be fetched users: {}", total_users);
     let users = Arc::new(users);
-    let clients_len = clients.len();
+    // let clients_len = clients.len();
 
     #[allow(clippy::let_underscore_future)]
     let _ = tokio::spawn(progress_bar(fetched_users.clone(), total_users));
@@ -93,21 +92,23 @@ async fn main() {
     }
 
     while let (Some(user), f) =
-        (rx.recv().await, fetched_users.load(std::sync::atomic::Ordering::SeqCst))
+        (rx.recv().await, fetched_users.lock().await)
     {
-        if f == users.len() + clients_len {
+        if *f + 1 >= users.len() {
+            user_infos.push(user);
             break;
         }
         user_infos.push(user);
-        if f % 250 == 0 {
+        if *f % 250 == 0 {
             write_points(&user_infos).unwrap();
         }
+        drop(f);
     }
 
     write_points(&user_infos).unwrap();
 }
 
-async fn progress_bar(fetched_users: Arc<AtomicUsize>, total_users: usize) {
+async fn progress_bar(fetched_users: Arc<Mutex<usize>>, total_users: usize) {
     let progress_bar = ProgressBar::new(total_users as u64);
     progress_bar.set_style(
         ProgressStyle::with_template(
@@ -119,8 +120,9 @@ async fn progress_bar(fetched_users: Arc<AtomicUsize>, total_users: usize) {
     progress_bar.set_position(0);
 
     loop {
-        let f = fetched_users.load(std::sync::atomic::Ordering::SeqCst);
-        progress_bar.set_position(f as u64);
+        let f = fetched_users.lock().await;
+        progress_bar.set_position(*f as u64);
+        drop(f);
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 }
@@ -128,18 +130,23 @@ async fn progress_bar(fetched_users: Arc<AtomicUsize>, total_users: usize) {
 async fn run_one_client(
     client: Client,
     users: Arc<Vec<String>>,
-    fetched_users: Arc<AtomicUsize>,
+    fetched_users: Arc<Mutex<usize>>,
     mpsc: mpsc::Sender<User>,
 ) {
     loop {
-        let user_to_fetch = fetched_users.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        if user_to_fetch >= users.len() {
+        let mut user_to_fetch = fetched_users.lock().await;
+        if *user_to_fetch + 1 >= users.len() {
+            drop(user_to_fetch);
             break;
         }
+        *user_to_fetch += 1;
+        let idx = *user_to_fetch;
+        drop(user_to_fetch);
+        
         let sleep_task = tokio::time::sleep(tokio::time::Duration::from_millis(
             std::env::var("ZIRCUIT_COOLDOWN").unwrap_or("1100".to_string()).parse::<u64>().unwrap(),
         ));
-        let user_addr = users[user_to_fetch].clone();
+        let user_addr = users[idx].clone();
         let user = tryhard::retry_fn(|| async { fetch_user_info(&client, &user_addr).await })
             .retries(5)
             .exponential_backoff(std::time::Duration::from_secs(5))
@@ -184,6 +191,7 @@ async fn init_clients() -> Vec<Client> {
         Ok(proxies) => proxies,
         Err(_) => Vec::new(),
     };
+    // let proxies: Vec<String> = PROXY.split('\n').map(|s| s.to_string()).collect();
 
     if proxies.is_empty() {
         warn!("No proxies found, will use direct connection");
@@ -196,6 +204,9 @@ async fn init_clients() -> Vec<Client> {
 
     // Proxies
     for proxy in proxies {
+        if proxy.is_empty() {
+            continue;
+        }
         let proxy = reqwest::Proxy::all(proxy).unwrap();
         let client = Client::builder().proxy(proxy).build().unwrap();
         clients.push(client);

@@ -36,7 +36,7 @@ pub async fn fetch_users() -> Result<Vec<String>, anyhow::Error> {
             Some(uri) => next_uri = uri,
             None => break,
         }
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 
     Ok(wallets
