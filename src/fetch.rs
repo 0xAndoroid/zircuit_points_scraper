@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub async fn fetch_user_info(client: &Client, address: &str) -> Result<User, anyhow::Error> {
     let points_response = client
         .get(format!("https://stake.zircuit.com/api/points/{}", address))
+        .header("User-Agent", "https://github.com/0xAndoroid/zircuit_points_scraper")
         .send()
         .await?
         .text()
